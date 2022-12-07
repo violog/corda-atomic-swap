@@ -6,31 +6,33 @@ import net.corda.core.contracts.ContractState
 import net.corda.core.contracts.requireThat
 import net.corda.core.identity.AbstractParty
 import net.corda.core.identity.Party
+import java.time.Instant
 import kotlin.math.pow
 
 @BelongsToContract(UTXOContract::class)
-data class UTXO(
-    val owner: Party,
+data class HTLC(
+    val sender: Party,
+    val receiver: Party,
     override val asset: Asset,
     override val amount: Int,
-    override val participants: List<AbstractParty> = listOf(owner)
+    val secret: String?,
+    val secretHash: String,
+    private val lockDuration: Int,
+    override val participants: List<AbstractParty> = listOf(sender, receiver)
 ) : ContractState, FungibleAsset {
-    // I want to have multiple participants that can see my balance; for now it will be only counterparty
-    // TODO: check duplicate participants, do it in withParticipants as well
+    val locktime: Long = Instant.now().epochSecond + lockDuration
+
     init {
         requireThat {
-            "Owner is not in participants" using (participants.contains(owner))
             "Too few participants: given ${participants.size}, minimum is 2" using (participants.size >= 2)
+            "Duration must be positive" using (lockDuration > 0)
         }
     }
 
-    constructor(owner: Party, asset: Asset, amount: Int, counterparty: Party) :
-            this(owner, asset, amount, listOf(owner, counterparty))
-
-    fun withParticipants(p: List<AbstractParty>): UTXO {
+    fun withParticipants(p: List<AbstractParty>): HTLC {
         return copy(participants = participants + p)
     }
 
     override fun toString(): String =
-        "Party \"${owner.name.organisation}\" has ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset"
+        "Party \"locked\" has ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset"
 }
