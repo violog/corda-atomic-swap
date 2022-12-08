@@ -16,6 +16,7 @@ import net.corda.testing.node.*
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
+import org.junit.jupiter.api.Disabled
 import kotlin.test.assertEquals
 
 
@@ -55,6 +56,7 @@ class FlowTests {
     }
 
     @Test
+    @Disabled("Coins are minted many times, no need to run separately")
     fun `happy mint flow of BTC and DASH`() {
         val btc = runMint(BTC, 75000000).outputs.single().data
         myLog("minted coins: $btc")
@@ -65,22 +67,22 @@ class FlowTests {
     @Test
     fun `happy burn flow of minted BTC`() {
         runMint(BTC, 4000000)
-        val ltx = runFlow(BurnFlow.Initiator(b.info.singleIdentity(), BTC))
+        val ltx = runFlow(a, BurnFlow.Initiator(b.info.singleIdentity(), BTC))
         myLog("burned coins: ${ltx.inputStates}")
     }
 
     @Test
     fun `happy transfer flow of minted DASH`() {
         runMint(DASH, 130400000)
-        val ltx = runFlow(TransferFlow.Initiator(b.info.singleIdentity(), DASH, 100400000))
+        val ltx = runFlow(a, TransferFlow.Initiator(b.info.singleIdentity(), DASH, 100400000))
         myLog("transfer inputs: ${ltx.inputStates}")
         myLog("transfer outputs: ${ltx.outputStates}")
     }
 
     @Test
-    fun `happy lock and unlock of DASH before locktime`() {
-        val amountToLock = 2000000000
-        val lockSecret = "good soldiers follow orders"
+    fun `happy lock, unlock and convert DASH before locktime`() {
+        val amountToLock = 2108200000
+        val lockSecret = "123"
         runMint(DASH, amountToLock)
         val lockTx = runLock(DASH, amountToLock, 10, lockSecret)
         myLog("lock inputs: ${lockTx.inputStates}")
@@ -90,25 +92,43 @@ class FlowTests {
         val unlockTx = runUnlock(htlcID, lockSecret)
         myLog("unlock inputs: ${unlockTx.inputStates}")
         myLog("unlock outputs: ${unlockTx.outputStates}")
+
+        val convTx = runConvert(htlcID)
+        myLog("convert inputs: ${convTx.inputStates}")
+        myLog("convert outputs: ${convTx.outputStates}")
+    }
+
+    @Test
+    fun `happy lock and convert BTC after locktime`() {
+        val amountToLock = 81000000
+        val lockSecret = "long_locking_secret$1"
+        runMint(BTC, amountToLock)
+        val lockTx = runLock(BTC, amountToLock, 1, lockSecret)
+        myLog("lock inputs: ${lockTx.inputStates}")
+        myLog("lock outputs: ${lockTx.outputStates}")
+        myLog("sleeping to wait for reaching locktime...")
+        Thread.sleep(1_000)
+
+        val htlcID = lockTx.outputsOfType<HTLC>().single().linearId
+        val convTx = runFlow(a, ConvertFlow.Initiator(b.info.singleIdentity(), htlcID))
+        myLog("convert inputs: ${convTx.inputStates}")
+        myLog("convert outputs: ${convTx.outputStates}")
     }
 
     private fun runMint(asset: Asset, amount: Int): LedgerTransaction =
-        runFlow(MintFlow.Initiator(b.info.singleIdentity(), asset, amount))
+        runFlow(a, MintFlow.Initiator(b.info.singleIdentity(), asset, amount))
 
     private fun runLock(asset: Asset, amount: Int, duration: Int, secret: String): LedgerTransaction =
-        runFlow(LockFlow.Initiator(b.info.singleIdentity(), asset, amount, duration, secret))
+        runFlow(a, LockFlow.Initiator(b.info.singleIdentity(), asset, amount, duration, secret))
 
-    private fun runUnlock(linearId: UniqueIdentifier, secret: String): LedgerTransaction {
-        val flow = UnlockFlow.Initiator(a.info.singleIdentity(), linearId, secret)
-        val future = b.startFlow(flow)
-        network.runNetwork()
-        val stx = future.getOrThrow()
-        checkTx(stx)
-        return stx.toLedgerTransaction(a.services, true)
-    }
+    private fun runUnlock(linearId: UniqueIdentifier, secret: String): LedgerTransaction =
+        runFlow(b, UnlockFlow.Initiator(a.info.singleIdentity(), linearId, secret))
 
-    private fun runFlow(flow: FlowLogic<SignedTransaction>): LedgerTransaction {
-        val future = a.startFlow(flow)
+    private fun runConvert(linearId: UniqueIdentifier): LedgerTransaction =
+        runFlow(b, ConvertFlow.Initiator(a.info.singleIdentity(), linearId))
+
+    private fun runFlow(initiator: StartedMockNode, flow: FlowLogic<SignedTransaction>): LedgerTransaction {
+        val future = initiator.startFlow(flow)
         network.runNetwork()
         val stx = future.getOrThrow()
         checkTx(stx)

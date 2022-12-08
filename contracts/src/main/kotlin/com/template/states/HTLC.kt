@@ -31,6 +31,8 @@ data class HTLC(
             MessageDigest.getInstance("SHA-256").digest(msg.toByteArray())
                 .fold(StringBuilder()) { sb, it -> sb.append("%02x".format(it)) }
                 .toString()
+
+        internal val Party.org: String get() = this.name.organisation
     }
 
     init {
@@ -56,10 +58,13 @@ data class HTLC(
         return copy(secret = null)
     }
 
+    fun isSecretValid() = secret != null && HTLC.hash(secret) == secretHash
+
     fun toStateAndRef(notary: Party, constraint: AttachmentConstraint, ref: StateRef): StateAndRef<HTLC> =
         StateAndRef(TransactionState(this, UTXOContract.ID, notary, null, constraint), ref)
 
     override fun toString(): String =
-        "${sender.name.organisation} locked ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset for " +
-                "${receiver.name.organisation} due to $locktime (duration=${lockDuration}s with secret=$secret and hash=$secretHash"
+        "\"${sender.org}\" locked ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset for " +
+                "\"${receiver.org}\" due to ${Instant.ofEpochSecond(locktime)} (duration=${lockDuration}s) with " +
+                "secret=${if (secret != null) "\"$secret\"" else null} and hash=$secretHash"
 }

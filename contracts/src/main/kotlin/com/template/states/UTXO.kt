@@ -1,6 +1,7 @@
 package com.template.states
 
 import com.template.contracts.UTXOContract
+import com.template.states.HTLC.Companion.org
 import net.corda.core.contracts.BelongsToContract
 import net.corda.core.contracts.ContractState
 import net.corda.core.contracts.requireThat
@@ -32,5 +33,5 @@ data class UTXO(
     }
 
     override fun toString(): String =
-        "Party \"${owner.name.organisation}\" has ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset"
+        "\"${owner.org}\" has ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset"
 }

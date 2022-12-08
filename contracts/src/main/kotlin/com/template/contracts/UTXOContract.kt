@@ -22,13 +22,14 @@ class UTXOContract : Contract {
     }
 
     interface Commands : CommandData {
-        class Mint : Commands
-        class Burn : Commands
-        class Transfer : Commands
+        class Mint : Commands // [] -> [UTXO]
+        class Burn : Commands // [UTXO, ...] -> []
+        class Transfer : Commands // [UTXO, ...] -> [UTXO, ...]
 
         // Why not separate HTLC contract? It is less convenient for 'intersecting' states, details are in corda/notes.txt
-        class Lock : Commands
-        class Unlock : Commands
+        class Lock : Commands // [UTXO] -> [HTLC] (no secret)
+        class Unlock : Commands // [HTLC] -> [HTLC] (supplying HTLC with a secret)
+        class Convert : Commands // [HTLC] -> [UTXO] (possible when valid secret was provided or locktime was reached)
 //        class AddParticipants: Commands // Not implemented yet, participants must always be the same
     }
 
@@ -39,7 +40,7 @@ class UTXOContract : Contract {
             // fixme: probably this is checked earlier, if so - drop it
             "At least one input/output state must be specified in transaction" using allStates.isNotEmpty()
             val part = allStates.first().participants
-            val isLockCmd = cmd.value is Commands.Lock || cmd.value is Commands.Unlock
+            val isLockCmd = cmd.value is Commands.Lock || cmd.value is Commands.Unlock || cmd.value is Commands.Convert
             val allowNonEqual = cmd.value is Commands.Mint || cmd.value is Commands.Burn
             // Lazy values work as intended, you may check it in Kotlin console with sleeping function
             val inputs by lazy { tx.inputStates.map { it as FungibleAsset } }
@@ -55,7 +56,6 @@ class UTXOContract : Contract {
             "Only the following assets are allowed: $availableAssets" using availableAssets.contains(asset)
             "All amounts must be positive" using allFung.all { it.amount > 0 }
             "For any command except Mint and Burn input and output amount must be equal" using (allowNonEqual || inSum == outSum)
-            // fixme: no, any number of inputs is possible! But for now OK, this is bullshit
             "Exactly one input state must be consumed" using (!isLockCmd || tx.inputs.size == 1)
             "Exactly one output state must be created" using (!isLockCmd || tx.outputs.size == 1)
         }
@@ -66,6 +66,7 @@ class UTXOContract : Contract {
             is Commands.Transfer -> verifyTransfer(tx)
             is Commands.Lock -> verifyLock(tx)
             is Commands.Unlock -> verifyUnlock(tx)
+            is Commands.Convert -> verifyConvert(tx)
             else -> throw IllegalArgumentException("Must use only one of the following commands: $availableCommands")
         }
     }
@@ -89,7 +90,6 @@ class UTXOContract : Contract {
         "New owners must be one of participants" using (participants.containsAll(outputs.map { it.owner }))
     }
 
-    // fixme: ensure that all fields evolve as intended, especially in HTLC
     private fun verifyLock(tx: LedgerTransaction) = requireThat {
         val input = tx.inputsOfType<UTXO>().single()
         val output = tx.outputsOfType<HTLC>().single()
@@ -100,12 +100,22 @@ class UTXOContract : Contract {
         "Locktime must be after the current time" using (output.locktime > Instant.now().epochSecond)
     }
 
-    private fun verifyUnlock(tx: LedgerTransaction) {
+    private fun verifyUnlock(tx: LedgerTransaction) = requireThat {
+        val input = tx.inputsOfType<HTLC>().single()
+        val output = tx.outputsOfType<HTLC>().single()
+        val noSecret = output.withoutSecret()
+        // TODO: try to change fields (I can override equals - and everything should work out (even the data class should do all the shit))
+        "All fields, except secret, must remain the same" using (input == noSecret)
+        "Locktime is reached, coins can only be taken by sender with Convert command" using
+                (Instant.now().epochSecond < input.locktime)
+        "Valid secret must be provided to claim assets" using output.isSecretValid()
+    }
+
+    private fun verifyConvert(tx: LedgerTransaction) {
         val input = tx.inputsOfType<HTLC>().single()
         val output = tx.outputsOfType<UTXO>().single()
-        if (input.locktime > Instant.now().epochSecond) requireThat { // locktime haven't been reached yet
-            "Secret must be provided to claim assets" using (input.secret != null)
-            "Secret must correspond its hash" using (HTLC.hash(input.secret!!) == input.secretHash)
+        if (Instant.now().epochSecond < input.locktime) requireThat { // locktime haven't been reached yet
+            "Valid secret must be provided to claim assets before locktime" using input.isSecretValid()
             "Only receiver is able to claim assets before locktime" using (input.receiver == output.owner)
             return
         }
