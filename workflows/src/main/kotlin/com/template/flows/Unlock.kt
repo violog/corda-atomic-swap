@@ -2,9 +2,9 @@ package com.template.flows
 
 import co.paralleluniverse.fibers.Suspendable
 import com.template.contracts.UTXOContract
-import com.template.states.Asset
 import com.template.states.HTLC
 import com.template.states.UTXO
+import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.contracts.requireThat
 import net.corda.core.flows.*
 import net.corda.core.identity.*
@@ -15,18 +15,16 @@ import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 
-object LockFlow {
+object UnlockFlow {
     @InitiatingFlow
     @StartableByRPC
     class Initiator(
-        private val receiver: Party,
-        private val asset: Asset,
-        private val amount: Int,
-        private val lockDuration: Int,
+        private val counterparty: Party,
+        private val linearId: UniqueIdentifier,
         private val secret: String
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "LOCK", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, "UNLOCK", ourIdentity)
 
         @Suspendable
         override fun call(): SignedTransaction {
@@ -34,32 +32,24 @@ object LockFlow {
             progressTracker.currentStep = TX_BUILD
             val notary = serviceHub.networkMapCache.notaryIdentities.single()
 
-            val inputsCriteria = QueryCriteria.VaultQueryCriteria()
+            val inputsCriteria = QueryCriteria.LinearStateQueryCriteria()
+                .withUuid(listOf(linearId.id))
                 .withStatus(Vault.StateStatus.UNCONSUMED)
                 .withRelevancyStatus(Vault.RelevancyStatus.RELEVANT)
-            val inputs = serviceHub.vaultService.queryBy<UTXO>(inputsCriteria).states
-
-            val myInputs = inputs
-                .filter { it.state.data.owner == ourIdentity }
-                .filter { it.state.data.asset == asset }
-            if (myInputs.isEmpty())
-                throw FlowException("No UTXO found for party $ourIdentity")
-            myLog("found ${inputs.size} UTXO of $asset, ${myInputs.size} of them is owned by the party $ourIdentity")
-
-            val coinsToLock = myInputs.filter { it.state.data.amount == amount }
-            if (coinsToLock.isEmpty())
-                throw FlowException("No UTXO of $asset found with exact amount $amount, try to obtain it first")
-            if (coinsToLock.size > 1)
-                myLog("found ${coinsToLock.size} UTXO with exact amount $amount, using first")
-
-            // TODO: save secret, add more steps to track progress, also in other places
-            // To save secret in separate table, I need DB service.
-            // For now I will only memorize the secret in my head. Later on I'll add that service.
-            val output = HTLC(ourIdentity, receiver, asset, amount, null, HTLC.hash(secret), lockDuration)
+            val inputs = serviceHub.vaultService.queryBy<HTLC>(inputsCriteria).states
+            if (inputs.size != 1)
+                throw FlowException("Expected to get one HTLC state by UUID, found ${inputs.size}")
+            val htlc = inputs.single().state.data
+            // todo: give the wrong secret and see what happens
+            val withSecret = htlc.withSecret(secret)
+                .toStateAndRef(notary, inputs.single().state.constraint, inputs.single().ref)
+            // oh, no, it probably won't work, because the state won't match ref; let's check:
+            // if it matches, then I need to validate everything in the responder flow as well
+            val output = UTXO(ourIdentity, htlc.asset, htlc.amount, listOf(counterparty, ourIdentity))
 
             val builder = TransactionBuilder(notary)
-                .addCommand(UTXOContract.Commands.Lock(), ourIdentity.owningKey, receiver.owningKey)
-                .addInputState(coinsToLock.first())
+                .addCommand(UTXOContract.Commands.Unlock(), ourIdentity.owningKey, htlc.sender.owningKey)
+                .addInputState(withSecret)
                 .addOutputState(output, UTXOContract.ID)
 
             myLog(TX_SIGN.label)
@@ -68,7 +58,7 @@ object LockFlow {
 
             myLog(INIT_SESSION.label)
             progressTracker.currentStep = INIT_SESSION
-            val session = initiateFlow(receiver)
+            val session = initiateFlow(htlc.sender)
 
             myLog(TX_COLLECTSIG.label)
             progressTracker.currentStep = TX_COLLECTSIG
@@ -83,25 +73,28 @@ object LockFlow {
 
     @InitiatedBy(Initiator::class)
     class Acceptor(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "LOCK", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, "UNLOCK", ourIdentity)
 
         @Suspendable
         override fun call(): SignedTransaction {
             val signTransactionFlow = object : SignTransactionFlow(counterpartySession) {
                 override fun checkTransaction(stx: SignedTransaction) = requireThat {
-                    // IDK if I should add more checks here or in another initiating flow
-                    // If tx is contractually valid, I should agree it, but then in another flow I can refuse to lock funds.
-                    // However, why should I do this if I can check all of it here? Looks like I can't pass args here,
-                    // so I'll have to basically validate tx and only then perform my flow.
                     myLog(TX_ADD_CHECKS.label)
                     val ltx = stx.toLedgerTransaction(serviceHub, false)
                     val inputs = ltx.inputs.map { it.state.data }
                     val outputs = ltx.outputs.map { it.data }
 
-                    "Inputs must be UTXO state references" using (inputs.all { it is UTXO })
-                    "Outputs must be HTLC states" using (outputs.all { it is HTLC })
-                    "Coins can only be locked by their owner" using
-                            (inputs.all { (it as UTXO).owner == counterpartySession.counterparty })
+                    "Inputs must be HTLC state references" using (inputs.all { it is HTLC })
+                    "Outputs must be UTXO states" using (outputs.all { it is UTXO })
+//                    val htlc = inputs.single() as HTLC
+                    val utxo = outputs.single() as UTXO
+//                    val now = Instant.now().epochSecond
+//                    "Before locktime, unlocking transaction can only be initiated by the intended receiver" using
+//                            (now < htlc.locktime && counterpartySession.counterparty == htlc.receiver)
+//                    "After locktime, unlocking transaction can only be initiated by the sender" using
+//                            (now >= htlc.locktime && counterpartySession.counterparty == htlc.sender)
+                    // this should be enough
+                    "Only the flow initiator can unlock his coins" using (counterpartySession.counterparty == utxo.owner)
                 }
             }
 

@@ -9,13 +9,11 @@ import net.corda.core.contracts.Contract
 import net.corda.core.contracts.requireSingleCommand
 import net.corda.core.contracts.requireThat
 import net.corda.core.transactions.LedgerTransaction
-import java.security.MessageDigest
 import java.time.Instant
 
 class UTXOContract : Contract {
     private val availableAssets: List<Asset> = listOf(BTC, DASH)
     private val availableCommands: List<String> = listOf("Mint", "Burn", "Transfer", "Lock", "Unlock")
-    private val messageDigest: MessageDigest = MessageDigest.getInstance("SHA-256")
 
     // it is not a good idea to use companion objects, because more operations are performed (read StackOverflow)
     // Anyway, I'd like to get rid of ID, if it is useless because of @BelongsToContract
@@ -107,7 +105,7 @@ class UTXOContract : Contract {
         val output = tx.outputsOfType<UTXO>().single()
         if (input.locktime > Instant.now().epochSecond) requireThat { // locktime haven't been reached yet
             "Secret must be provided to claim assets" using (input.secret != null)
-            "Secret must correspond its hash" using (hash(input.secret!!) == input.secretHash)
+            "Secret must correspond its hash" using (HTLC.hash(input.secret!!) == input.secretHash)
             "Only receiver is able to claim assets before locktime" using (input.receiver == output.owner)
             return
         }
@@ -115,11 +113,6 @@ class UTXOContract : Contract {
             "Only sender is able to claim assets after locktime" using (input.sender == output.owner)
         }
     }
-
-    private fun hash(msg: String): String =
-        messageDigest.digest(msg.toByteArray())
-            .fold(StringBuilder()) { sb, it -> sb.append("%02x".format(it)) }
-            .toString()
 }
 
 // TODO: move to the different file

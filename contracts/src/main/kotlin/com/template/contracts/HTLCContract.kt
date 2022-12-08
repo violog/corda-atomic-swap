@@ -82,7 +82,6 @@ class HTLCContract : Contract {
         "Secret must not be shared on locking" using (input.secret != null)
     }
 
-    // fixme: same methods in UTXOContract
     /*
         private fun containsAllSigners(cmd: CommandWithParties<Commands>, utxos: List<ContractState>): Boolean =
             cmd.signers.containsAll(anyFirst(utxos, listOf()).participants.map { it.owningKey })
