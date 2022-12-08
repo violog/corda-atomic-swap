@@ -16,15 +16,13 @@ data class HTLC(
     override val asset: Asset,
     override val amount: Int,
     val secret: String?,
-//    val secretHash: String = if(secret!=null) hash(secret) else throw Exception("must be set up"), // govnina
     val secretHash: String,
-    private val lockDuration: Int,
+    val locktime: Long,
     override val linearId: UniqueIdentifier = UniqueIdentifier(),
     override val participants: List<AbstractParty> = listOf(sender, receiver)
 ) : LinearState, FungibleAsset {
     // Linear state is the best way: I need to know only a single unique field to unlock funds
     // This is simpler than using multiple fields to filter by
-    val locktime: Long = Instant.now().epochSecond + lockDuration
 
     companion object {
         fun hash(msg: String): String =
@@ -38,11 +36,7 @@ data class HTLC(
     init {
         requireThat {
             "Too few participants: given ${participants.size}, minimum is 2" using (participants.size >= 2)
-            "Duration must be positive" using (lockDuration > 0)
             "If secret is given, it must correspond the hash" using (secret == null || HTLC.hash(secret) == secretHash)
-            // It won't work, dummy, because you call copy() and it will validate everything again
-//            "Secret must be non-null; to delete it after hashing, call withoutSecret" using (secret != null)
-//            "Secret length must be >= $MIN_SECRET_LENGTH" using (secret!!.length >= MIN_SECRET_LENGTH)
         }
     }
 
@@ -65,6 +59,6 @@ data class HTLC(
 
     override fun toString(): String =
         "\"${sender.org}\" locked ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset for " +
-                "\"${receiver.org}\" due to ${Instant.ofEpochSecond(locktime)} (duration=${lockDuration}s) with " +
+                "\"${receiver.org}\" due to ${Instant.ofEpochSecond(locktime)} with " +
                 "secret=${if (secret != null) "\"$secret\"" else null} and hash=$secretHash"
 }

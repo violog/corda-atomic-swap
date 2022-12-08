@@ -37,7 +37,7 @@ class FlowTests {
                         TestCordapp.findCordapp("com.template.contracts"),
                         TestCordapp.findCordapp("com.template.flows")
                     ),
-                    notarySpecs = listOf(MockNetworkNotarySpec(CordaX500Name("Revan", "Star Forge", "GB")))
+                    notarySpecs = listOf(MockNetworkNotarySpec(CordaX500Name("Revan", "Star Forge", "GB"), false))
                 )
             )
             // This shit doesn't allow custom countries
@@ -58,10 +58,13 @@ class FlowTests {
     @Test
     @Disabled("Coins are minted many times, no need to run separately")
     fun `happy mint flow of BTC and DASH`() {
-        val btc = runMint(BTC, 75000000).outputs.single().data
-        myLog("minted coins: $btc")
-        val dash = runMint(DASH, 420000000).outputs.single().data
-        myLog("minted coins: $dash")
+        return // for some reason @Disabled didn't actually disable the test, so I did it myself
+        /*
+                val btc = runMint(BTC, 75000000).outputs.single().data
+                myLog("minted coins: $btc")
+                val dash = runMint(DASH, 420000000).outputs.single().data
+                myLog("minted coins: $dash")
+        */
     }
 
     @Test
@@ -81,7 +84,7 @@ class FlowTests {
 
     @Test
     fun `happy lock, unlock and convert DASH before locktime`() {
-        val amountToLock = 2108200000
+        val amountToLock = 2108400000
         val lockSecret = "123"
         runMint(DASH, amountToLock)
         val lockTx = runLock(DASH, amountToLock, 10, lockSecret)
@@ -102,12 +105,13 @@ class FlowTests {
     fun `happy lock and convert BTC after locktime`() {
         val amountToLock = 81000000
         val lockSecret = "long_locking_secret$1"
+        val lockDuration = 2
         runMint(BTC, amountToLock)
-        val lockTx = runLock(BTC, amountToLock, 1, lockSecret)
+        val lockTx = runLock(BTC, amountToLock, lockDuration, lockSecret)
         myLog("lock inputs: ${lockTx.inputStates}")
         myLog("lock outputs: ${lockTx.outputStates}")
         myLog("sleeping to wait for reaching locktime...")
-        Thread.sleep(1_000)
+        Thread.sleep((lockDuration * 1000).toLong())
 
         val htlcID = lockTx.outputsOfType<HTLC>().single().linearId
         val convTx = runFlow(a, ConvertFlow.Initiator(b.info.singleIdentity(), htlcID))

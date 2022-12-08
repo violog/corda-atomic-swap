@@ -14,6 +14,7 @@ import net.corda.core.node.services.vault.QueryCriteria
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
+import java.time.Instant
 
 object LockFlow {
     @InitiatingFlow
@@ -55,7 +56,8 @@ object LockFlow {
             // TODO: save secret, add more steps to track progress, also in other places
             // To save secret in separate table, I need DB service.
             // For now I will only memorize the secret in my head. Later on I'll add that service.
-            val output = HTLC(ourIdentity, receiver, asset, amount, null, HTLC.hash(secret), lockDuration)
+            val locktime = Instant.now().epochSecond + lockDuration
+            val output = HTLC(ourIdentity, receiver, asset, amount, null, HTLC.hash(secret), locktime)
 
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Lock(), ourIdentity.owningKey, receiver.owningKey)
