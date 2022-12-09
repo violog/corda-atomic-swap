@@ -17,6 +17,8 @@ import net.corda.core.utilities.ProgressTracker
 import java.time.Instant
 
 object ConvertFlow {
+    private const val flowLabel = "CONVERT"
+
     @InitiatingFlow
     @StartableByRPC
     class Initiator(
@@ -24,17 +26,16 @@ object ConvertFlow {
         private val linearId: UniqueIdentifier
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "CONVERT", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
 
         @Suspendable
         override fun call(): SignedTransaction {
-            myLog(TX_BUILD.label)
-            progressTracker.currentStep = TX_BUILD
+            myLog(START_FLOW.label)
+            progressTracker.currentStep = START_FLOW
             val notary = serviceHub.networkMapCache.notaryIdentities.single()
 
             val inputsCriteria = QueryCriteria.LinearStateQueryCriteria()
                 .withUuid(listOf(linearId.id))
-                .withStatus(Vault.StateStatus.UNCONSUMED)
                 .withRelevancyStatus(Vault.RelevancyStatus.RELEVANT)
             val inputs = serviceHub.vaultService.queryBy<HTLC>(inputsCriteria).states
             if (inputs.size != 1)
@@ -50,29 +51,13 @@ object ConvertFlow {
                 .addInputState(inputs.single())
                 .addOutputState(output, UTXOContract.ID)
 
-            // FIXME: can all this and other repeatable shit be in a separate single function?
-            myLog(TX_SIGN.label)
-            progressTracker.currentStep = TX_SIGN
-            val partSignedTx = serviceHub.signInitialTransaction(builder)
-
-            myLog(INIT_SESSION.label)
-            progressTracker.currentStep = INIT_SESSION
-            val session = initiateFlow(counterparty)
-
-            myLog(TX_COLLECTSIG.label)
-            progressTracker.currentStep = TX_COLLECTSIG
-            val fullSignedTx =
-                subFlow(CollectSignaturesFlow(partSignedTx, setOf(session), TX_COLLECTSIG.childProgressTracker()))
-
-            myLog(TX_FINALIZE.label)
-            progressTracker.currentStep = TX_FINALIZE
-            return subFlow(FinalityFlow(fullSignedTx, setOf(session), TX_FINALIZE.childProgressTracker()))
+            return subFlow(SignFinalizeFlow(counterparty, builder, flowLabel, progressTracker))
         }
     }
 
     @InitiatedBy(Initiator::class)
     class Acceptor(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "CONVERT", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
 
         @Suspendable
         override fun call(): SignedTransaction {

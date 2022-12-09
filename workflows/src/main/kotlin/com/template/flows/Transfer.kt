@@ -16,6 +16,8 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 
 object TransferFlow {
+    private const val flowLabel = "TRANSFER"
+
     @InitiatingFlow
     @StartableByRPC
     class Initiator(
@@ -24,7 +26,7 @@ object TransferFlow {
         private val amount: Int
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "TRANSFER", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
 
         // now I have to define logic that will pick first N UTXOs and reject the others
         private fun pickEnoughCoins(inputs: List<StateAndRef<UTXO>>, acc: List<StateAndRef<UTXO>> = listOf()):
@@ -38,12 +40,11 @@ object TransferFlow {
 
         @Suspendable
         override fun call(): SignedTransaction {
-            myLog(TX_BUILD.label)
-            progressTracker.currentStep = TX_BUILD
+            myLog(START_FLOW.label)
+            progressTracker.currentStep = START_FLOW
             val notary = serviceHub.networkMapCache.notaryIdentities.single()
 
             val inputsCriteria = QueryCriteria.VaultQueryCriteria()
-                .withStatus(Vault.StateStatus.UNCONSUMED)
                 .withRelevancyStatus(Vault.RelevancyStatus.RELEVANT)
             val inputs = serviceHub.vaultService.queryBy<UTXO>(inputsCriteria).states
             // Use queryable state? But how? No, I don't need it. Probably I'll need it for HTLC, especially to get my secret from vault.
@@ -67,28 +68,13 @@ object TransferFlow {
             if (change > 0)
                 builder.addOutputState(UTXO(ourIdentity, asset, change, listOf(ourIdentity, receiver)))
 
-            myLog(TX_SIGN.label)
-            progressTracker.currentStep = TX_SIGN
-            val partSignedTx = serviceHub.signInitialTransaction(builder)
-
-            myLog(INIT_SESSION.label)
-            progressTracker.currentStep = INIT_SESSION
-            val session = initiateFlow(receiver)
-
-            myLog(TX_COLLECTSIG.label)
-            progressTracker.currentStep = TX_COLLECTSIG
-            val fullSignedTx =
-                subFlow(CollectSignaturesFlow(partSignedTx, setOf(session), TX_COLLECTSIG.childProgressTracker()))
-
-            myLog(TX_FINALIZE.label)
-            progressTracker.currentStep = TX_FINALIZE
-            return subFlow(FinalityFlow(fullSignedTx, setOf(session), TX_FINALIZE.childProgressTracker()))
+            return subFlow(SignFinalizeFlow(receiver, builder, flowLabel, progressTracker))
         }
     }
 
     @InitiatedBy(Initiator::class)
     class Acceptor(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
-        private fun myLog(msg: String) = WRAPPED_LOG(msg, "TRANSFER", ourIdentity)
+        private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
 
         @Suspendable
         override fun call(): SignedTransaction {
