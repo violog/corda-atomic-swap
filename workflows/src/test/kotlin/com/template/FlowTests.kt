@@ -89,7 +89,7 @@ class FlowTests {
 
     @Test
     fun `happy lock, unlock and convert DASH before locktime`() {
-        val amountToLock = 2108400000
+        val amountToLock: Long = 2108400000
         val secret = "before_locktime"
         runMint(DASH, amountToLock)
         val lockTx = runLock(DASH, amountToLock, 10, HTLC.hash(secret))
@@ -108,7 +108,7 @@ class FlowTests {
 
     @Test
     fun `happy lock and convert BTC after locktime`() {
-        val amountToLock = 81000000
+        val amountToLock: Long = 81000000
         val lockSecretHash = HTLC.hash("after_locktime")
         val lockDuration = 2
         runMint(BTC, amountToLock)
@@ -126,8 +126,8 @@ class FlowTests {
 
     @Test
     fun `happy swap of BTC and DASH`() {
-        val bitcoinAmount = 650000
-        val dashAmount = 930400000
+        val bitcoinAmount: Long = 45000000
+        val dashAmount: Long = 12900000000
         val initiatorSecret = "swap_btc_dash" // we assume that responder doesn't know it
         val secretHash = HTLC.hash(initiatorSecret)
 
@@ -158,13 +158,13 @@ class FlowTests {
         myLog("Parties have converted their coins:\n${convTx1.outputStates.single()}\n${convTx2.outputStates.single()}")
     }
 
-    //    private fun runMint(asset: Asset, amount: Int, initiator: StartedMockNode = a, responder: StartedMockNode = b): LedgerTransaction =
+    //    private fun runMint(asset: Asset, amount: Long, initiator: StartedMockNode = a, responder: StartedMockNode = b): LedgerTransaction =
 //        runFlow(initiator, MintFlow.Initiator(responder.party, asset, amount))
     // hard to implement, it is easier without this
-    private fun runMint(asset: Asset, amount: Int): LedgerTransaction =
+    private fun runMint(asset: Asset, amount: Long): LedgerTransaction =
         runFlow(a, MintFlow.Initiator(b.party, asset, amount))
 
-    private fun runLock(asset: Asset, amount: Int, duration: Int, hash: String): LedgerTransaction =
+    private fun runLock(asset: Asset, amount: Long, duration: Int, hash: String): LedgerTransaction =
         runFlow(a, LockFlow.Initiator(b.party, asset, amount, duration, hash))
 
     private fun runUnlock(linearId: UniqueIdentifier, secret: String): LedgerTransaction =

@@ -5,7 +5,7 @@ import net.corda.core.serialization.CordaSerializable
 @CordaSerializable
 interface FungibleAsset {
     val asset: Asset
-    val amount: Int
+    val amount: Long
 }
 
 @CordaSerializable

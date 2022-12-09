@@ -14,7 +14,7 @@ data class HTLC(
     val sender: Party,
     val receiver: Party,
     override val asset: Asset,
-    override val amount: Int,
+    override val amount: Long,
     val secret: String?,
     val secretHash: String,
     val locktime: Long,

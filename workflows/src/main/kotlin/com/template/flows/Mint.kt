@@ -19,7 +19,7 @@ object MintFlow {
     class Initiator(
         private val counterparty: Party,
         private val asset: Asset,
-        private val amount: Int
+        private val amount: Long
     ) : FlowLogic<SignedTransaction>() {
         private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())

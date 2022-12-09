@@ -23,7 +23,7 @@ object TransferFlow {
     class Initiator(
         private val receiver: Party,
         private val asset: Asset,
-        private val amount: Int
+        private val amount: Long
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
         private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)

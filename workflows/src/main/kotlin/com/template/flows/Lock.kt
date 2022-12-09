@@ -24,7 +24,7 @@ object LockFlow {
     class Initiator(
         private val receiver: Party,
         private val asset: Asset,
-        private val amount: Int,
+        private val amount: Long,
         private val lockDuration: Int,
         private val secretHash: String
     ) : FlowLogic<SignedTransaction>() {

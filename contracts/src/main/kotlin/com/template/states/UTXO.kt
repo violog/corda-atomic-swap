@@ -13,7 +13,7 @@ import kotlin.math.pow
 data class UTXO(
     val owner: Party,
     override val asset: Asset,
-    override val amount: Int,
+    override val amount: Long,
     override val participants: List<AbstractParty> = listOf(owner)
 ) : ContractState, FungibleAsset {
     // I want to have multiple participants that can see my balance; for now it will be only counterparty
@@ -25,7 +25,7 @@ data class UTXO(
         }
     }
 
-    constructor(owner: Party, asset: Asset, amount: Int, counterparty: Party) :
+    constructor(owner: Party, asset: Asset, amount: Long, counterparty: Party) :
             this(owner, asset, amount, listOf(owner, counterparty))
 
     fun withParticipants(p: List<AbstractParty>): UTXO {
