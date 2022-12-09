@@ -26,7 +26,7 @@ object LockFlow {
         private val asset: Asset,
         private val amount: Int,
         private val lockDuration: Int,
-        private val secret: String
+        private val secretHash: String
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
         private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
@@ -58,7 +58,7 @@ object LockFlow {
             // To save secret in separate table, I need DB service.
             // For now I will only memorize the secret in my head. Later on I'll add that service.
             val locktime = Instant.now().epochSecond + lockDuration
-            val output = HTLC(ourIdentity, receiver, asset, amount, null, HTLC.hash(secret), locktime)
+            val output = HTLC(ourIdentity, receiver, asset, amount, null, secretHash, locktime)
 
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Lock(), ourIdentity.owningKey, receiver.owningKey)

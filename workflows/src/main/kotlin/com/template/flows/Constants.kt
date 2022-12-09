@@ -21,4 +21,6 @@ internal object TX_ADD_CHECKS : Step("Performing additional transaction checks b
 internal val BASIC_STEPS = listOf(START_FLOW, TX_SIGN, INIT_SESSION, TX_COLLECTSIG, TX_FINALIZE)
 
 internal val WRAPPED_LOG =
-    { msg: String, flow: String, party: Party -> println("[FLOW:$flow] <${party.name.organisation}> $msg") }
+    { msg: String, flow: String, party: Party -> if (FLOW_LOG_ENABLED) println("[FLOW:$flow] <${party.name.organisation}> $msg") }
+
+private const val FLOW_LOG_ENABLED = false
