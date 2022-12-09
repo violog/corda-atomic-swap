@@ -20,7 +20,7 @@ data class HTLC(
     val locktime: Long,
     override val linearId: UniqueIdentifier = UniqueIdentifier(),
     override val participants: List<AbstractParty> = listOf(sender, receiver)
-) : LinearState, FungibleAsset {
+) : LinearState, FungibleToken {
     // Linear state is the best way: I need to know only a single unique field to unlock funds
     // This is simpler than using multiple fields to filter by
 
@@ -39,10 +39,6 @@ data class HTLC(
             "Must be valid SHA-256 hash of secret" using (secretHash.matches(Regex("[0-9a-f]{64}")))
             "If secret is given, it must correspond the hash" using (secret == null || HTLC.hash(secret) == secretHash)
         }
-    }
-
-    fun withParticipants(p: List<AbstractParty>): HTLC {
-        return copy(participants = participants + p)
     }
 
     fun withSecret(secret: String): HTLC {

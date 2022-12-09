@@ -1,8 +1,6 @@
 package com.template.contracts
 
-import com.template.states.Asset
-import com.template.states.HTLC
-import com.template.states.UTXO
+import com.template.states.*
 import net.corda.core.contracts.CommandData
 import net.corda.core.contracts.Contract
 import net.corda.core.contracts.requireSingleCommand

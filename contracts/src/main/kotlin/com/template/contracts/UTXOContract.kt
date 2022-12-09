@@ -1,9 +1,6 @@
 package com.template.contracts
 
-import com.template.states.Asset
-import com.template.states.FungibleAsset
-import com.template.states.HTLC
-import com.template.states.UTXO
+import com.template.states.*
 import net.corda.core.contracts.CommandData
 import net.corda.core.contracts.Contract
 import net.corda.core.contracts.requireSingleCommand
@@ -15,12 +12,6 @@ class UTXOContract : Contract {
     private val availableAssets: List<Asset> = listOf(BTC, DASH)
     private val availableCommands: List<String> = listOf("Mint", "Burn", "Transfer", "Lock", "Unlock")
 
-    // it is not a good idea to use companion objects, because more operations are performed (read StackOverflow)
-    // Anyway, I'd like to get rid of ID, if it is useless because of @BelongsToContract
-    companion object {
-        val ID = UTXOContract::class.qualifiedName!!
-    }
-
     interface Commands : CommandData {
         class Mint : Commands // [] -> [UTXO]
         class Burn : Commands // [UTXO, ...] -> []
@@ -30,28 +21,25 @@ class UTXOContract : Contract {
         class Lock : Commands // [UTXO] -> [HTLC] (no secret)
         class Unlock : Commands // [HTLC] -> [HTLC] (supplying HTLC with a secret)
         class Convert : Commands // [HTLC] -> [UTXO] (possible when valid secret was provided or locktime was reached)
-//        class AddParticipants: Commands // Not implemented yet, participants must always be the same
     }
 
     override fun verify(tx: LedgerTransaction) {
         val cmd = tx.commands.requireSingleCommand<Commands>()
         val allStates = tx.inputStates + tx.outputStates
         requireThat {
-            // fixme: probably this is checked earlier, if so - drop it
-            "At least one input/output state must be specified in transaction" using allStates.isNotEmpty()
             val part = allStates.first().participants
             val isLockCmd = cmd.value is Commands.Lock || cmd.value is Commands.Unlock || cmd.value is Commands.Convert
             val allowNonEqual = cmd.value is Commands.Mint || cmd.value is Commands.Burn
             // Lazy values work as intended, you may check it in Kotlin console with sleeping function
-            val inputs by lazy { tx.inputStates.map { it as FungibleAsset } }
-            val outputs by lazy { tx.outputStates.map { it as FungibleAsset } }
+            val inputs by lazy { tx.inputStates.map { it as FungibleToken } }
+            val outputs by lazy { tx.outputStates.map { it as FungibleToken } }
             val allFung by lazy { inputs + outputs }
             val asset by lazy { allFung.first().asset }
             val inSum by lazy { inputs.map { it.amount }.sum() }
             val outSum by lazy { outputs.map { it.amount }.sum() }
             "Participants must appear same in all inputs and outputs" using allStates.all { part == it.participants }
             "All participants must sign the transaction" using cmd.signers.containsAll(part.map { it.owningKey })
-            "All states must be of FungibleAsset state" using allStates.all { it is FungibleAsset }
+            "All states must be of FungibleAsset state" using allStates.all { it is FungibleToken }
             "All inputs and outputs must use the same asset" using allFung.all { asset == it.asset }
             "Only the following assets are allowed: $availableAssets" using availableAssets.contains(asset)
             "All amounts must be positive" using allFung.all { it.amount > 0 }
@@ -104,7 +92,6 @@ class UTXOContract : Contract {
         val input = tx.inputsOfType<HTLC>().single()
         val output = tx.outputsOfType<HTLC>().single()
         val noSecret = output.withoutSecret()
-        // TODO: try to change fields (I can override equals - and everything should work out (even the data class should do all the shit))
         "All fields, except secret, must remain the same" using (input == noSecret)
         "Locktime is reached, coins can only be taken by sender with Convert command" using
                 (Instant.now().epochSecond < input.locktime)
@@ -123,15 +110,4 @@ class UTXOContract : Contract {
             "Only sender is able to claim assets after locktime" using (input.sender == output.owner)
         }
     }
-}
-
-// TODO: move to the different file
-object BTC : Asset() {
-    override val code: String = "BTC"
-    override val decimals: Int = 8
-}
-
-object DASH : Asset() {
-    override val code: String = "DASH"
-    override val decimals: Int = 8
 }

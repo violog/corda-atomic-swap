@@ -23,7 +23,6 @@ object UnlockFlow {
         private val counterparty: Party,
         private val linearId: UniqueIdentifier,
         private val secret: String
-        // todo: give the wrong secret and see what happens
     ) : FlowLogic<SignedTransaction>() {
         override val progressTracker = ProgressTracker(*BASIC_STEPS.toTypedArray())
         private fun myLog(msg: String) = WRAPPED_LOG(msg, flowLabel, ourIdentity)
@@ -44,7 +43,7 @@ object UnlockFlow {
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Unlock(), ourIdentity.owningKey, counterparty.owningKey)
                 .addInputState(inputs.single())
-                .addOutputState(inputs.single().state.data.withSecret(secret), UTXOContract.ID)
+                .addOutputState(inputs.single().state.data.withSecret(secret))
 
             return subFlow(SignFinalizeFlow(counterparty, builder, flowLabel, progressTracker))
         }

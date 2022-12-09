@@ -49,7 +49,7 @@ object ConvertFlow {
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Convert(), ourIdentity.owningKey, counterparty.owningKey)
                 .addInputState(inputs.single())
-                .addOutputState(output, UTXOContract.ID)
+                .addOutputState(output)
 
             return subFlow(SignFinalizeFlow(counterparty, builder, flowLabel, progressTracker))
         }

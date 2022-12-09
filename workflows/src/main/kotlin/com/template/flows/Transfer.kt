@@ -63,7 +63,7 @@ object TransferFlow {
 
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Transfer(), ourIdentity.owningKey, receiver.owningKey)
-                .addOutputState(destination, UTXOContract.ID)
+                .addOutputState(destination)
             coinsToSend.forEach { builder.addInputState(it) }
             if (change > 0)
                 builder.addOutputState(UTXO(ourIdentity, asset, change, listOf(ourIdentity, receiver)))

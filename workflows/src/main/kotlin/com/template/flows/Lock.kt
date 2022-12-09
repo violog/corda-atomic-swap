@@ -45,7 +45,7 @@ object LockFlow {
                 .filter { it.state.data.owner == ourIdentity }
                 .filter { it.state.data.asset == asset }
             if (myInputs.isEmpty())
-                throw FlowException("No UTXO found for party $ourIdentity")
+                throw FlowException("No UTXO of $asset found for party $ourIdentity")
             myLog("found ${inputs.size} UTXO of $asset, ${myInputs.size} of them is owned by the party $ourIdentity")
 
             val coinsToLock = myInputs.filter { it.state.data.amount == amount }
@@ -54,16 +54,15 @@ object LockFlow {
             if (coinsToLock.size > 1)
                 myLog("found ${coinsToLock.size} UTXO with exact amount $amount, using first")
 
-            // TODO: save secret, add more steps to track progress, also in other places
-            // To save secret in separate table, I need DB service.
-            // For now I will only memorize the secret in my head. Later on I'll add that service.
+            // TODO: save secret in local storage (see samples-kotlin/Basic/flow-database-access)
+            // To save secret in separate table, I need DB service. For now I will only memorize the secret in my head.
             val locktime = Instant.now().epochSecond + lockDuration
             val output = HTLC(ourIdentity, receiver, asset, amount, null, secretHash, locktime)
 
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Lock(), ourIdentity.owningKey, receiver.owningKey)
                 .addInputState(coinsToLock.first())
-                .addOutputState(output, UTXOContract.ID)
+                .addOutputState(output)
 
             return subFlow(SignFinalizeFlow(receiver, builder, flowLabel, progressTracker))
         }

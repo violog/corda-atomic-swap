@@ -32,7 +32,7 @@ object MintFlow {
             val output = UTXO(ourIdentity, asset, amount, counterparty)
             val builder = TransactionBuilder(notary)
                 .addCommand(UTXOContract.Commands.Mint(), ourIdentity.owningKey, counterparty.owningKey)
-                .addOutputState(output, UTXOContract.ID)
+                .addOutputState(output)
             return subFlow(SignFinalizeFlow(counterparty, builder, flowLabel, progressTracker))
         }
     }

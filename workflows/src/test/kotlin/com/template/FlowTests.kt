@@ -1,9 +1,9 @@
 package com.template
 
-import com.template.contracts.BTC
-import com.template.contracts.DASH
 import com.template.flows.*
 import com.template.states.Asset
+import com.template.states.BTC
+import com.template.states.DASH
 import com.template.states.HTLC
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.flows.FlowLogic
@@ -19,6 +19,7 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.jupiter.api.Disabled
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 
 
 class FlowTests {
@@ -110,15 +111,45 @@ class FlowTests {
         val lockDuration = 2
         runMint(BTC, amountToLock)
         val lockTx = runLock(BTC, amountToLock, lockDuration, lockSecretHash)
-        myLog("lock inputs: ${lockTx.inputStates}")
-        myLog("lock outputs: ${lockTx.outputStates}")
-        myLog("sleeping to wait for reaching locktime...")
+        myLog("Lock input: ${lockTx.inputStates.single()}")
+        myLog("Lock output: ${lockTx.outputStates.single()}")
+        myLog("Sleeping to wait for reaching locktime...")
         Thread.sleep((lockDuration * 1000).toLong())
 
         val htlcID = lockTx.outputsOfType<HTLC>().single().linearId
         val convTx = runFlow(a, ConvertFlow.Initiator(b.party, htlcID))
-        myLog("convert inputs: ${convTx.inputStates}")
-        myLog("convert outputs: ${convTx.outputStates}")
+        myLog("Convert input: ${convTx.inputStates.single()}")
+        myLog("Convert output: ${convTx.outputStates.single()}")
+    }
+
+    @Test
+    fun `various unhappy lock-unlock-convert`() {
+        val amountToLock: Long = 43200000
+        val secret = "unhappy_secret"
+        val hash = HTLC.hash(secret)
+        val duration = 2
+        runMint(BTC, amountToLock)
+
+        val lockTx = runLock(BTC, amountToLock, duration, hash)
+        myLog("Lock input: ${lockTx.inputStates.single()}")
+        myLog("Lock output: ${lockTx.outputStates.single()}")
+        val htlcID = lockTx.outputsOfType<HTLC>().single().linearId
+
+        myLog("Should fail with the wrong secret")
+        assertFails { runUnlock(htlcID, "happy_sec") }
+        myLog("Should fail when locker tries to unlock before locktime (pass contract, but fail on responder flow")
+        assertFails { runFlow(a, UnlockFlow.Initiator(b.party, htlcID, secret)) }
+        myLog("Should fail when anybody tries to convert locked contract")
+        assertFails { runConvert(htlcID) }
+        // might fail because of delay, it's OK, just re-run the test
+        assertFails { runFlow(a, ConvertFlow.Initiator(b.party, htlcID)) }
+
+        Thread.sleep((duration / 2 * 1000).toLong())
+        myLog("Should fail when unlocker tries to unlock/convert after locktime")
+        assertFails { runUnlock(htlcID, secret) }
+        assertFails { runConvert(htlcID) }
+        val convTx = runFlow(a, ConvertFlow.Initiator(b.party, htlcID))
+        myLog("Convert output: ${convTx.outputStates.single()}")
     }
 
     @Test
@@ -155,9 +186,6 @@ class FlowTests {
         myLog("Parties have converted their coins:\n${convTx1.outputStates.single()}\n${convTx2.outputStates.single()}")
     }
 
-    //    private fun runMint(asset: Asset, amount: Long, initiator: StartedMockNode = a, responder: StartedMockNode = b): LedgerTransaction =
-//        runFlow(initiator, MintFlow.Initiator(responder.party, asset, amount))
-    // hard to implement, it is easier without this
     private fun runMint(asset: Asset, amount: Long): LedgerTransaction =
         runFlow(a, MintFlow.Initiator(b.party, asset, amount))
 
