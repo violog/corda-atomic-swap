@@ -36,6 +36,7 @@ data class HTLC(
     init {
         requireThat {
             "Too few participants: given ${participants.size}, minimum is 2" using (participants.size >= 2)
+            "Must be valid SHA-256 hash of secret" using (secretHash.matches(Regex("[0-9a-f]{64}")))
             "If secret is given, it must correspond the hash" using (secret == null || HTLC.hash(secret) == secretHash)
         }
     }
@@ -54,11 +55,17 @@ data class HTLC(
 
     fun isSecretValid() = secret != null && HTLC.hash(secret) == secretHash
 
-    fun toStateAndRef(notary: Party, constraint: AttachmentConstraint, ref: StateRef): StateAndRef<HTLC> =
-        StateAndRef(TransactionState(this, UTXOContract.ID, notary, null, constraint), ref)
-
-    override fun toString(): String =
-        "\"${sender.org}\" locked ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset for " +
-                "\"${receiver.org}\" due to ${Instant.ofEpochSecond(locktime)} with " +
-                "secret=${if (secret != null) "\"$secret\"" else null} and hash=$secretHash"
+    override fun toString(): String {
+        val vl = amount.toFloat() / 10f.pow(asset.decimals)
+        val ltf = Instant.ofEpochSecond(locktime)
+        val now = Instant.now()
+        val part = "locker=${sender.org} unlocker=${receiver.org} value=$vl$asset locktime=$ltf secret_hash=$secretHash"
+        if (isSecretValid()) {
+            return "$part unlocked_by=SECRET secret=\"$secret\""
+        }
+        if (now.epochSecond >= locktime) {
+            return "$part unlocked_by=LOCKTIME current_time=$now"
+        }
+        return part
+    }
 }
