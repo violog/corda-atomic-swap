@@ -42,14 +42,11 @@ class FlowTests {
                         TestCordapp.findCordapp("com.template.contracts"),
                         TestCordapp.findCordapp("com.template.flows")
                     ),
-                    notarySpecs = listOf(MockNetworkNotarySpec(CordaX500Name("Revan", "Star Forge", "GB"), false))
+                    notarySpecs = listOf(MockNetworkNotarySpec(CordaX500Name("Notary", "Kyiv", "UA"), false))
                 )
             )
-            // This shit doesn't allow custom countries
-            a = network.createPartyNode(CordaX500Name("T3-M4", "Dromund-Kaas", "US"))
-            b = network.createPartyNode(CordaX500Name("HK-47", "Mandalor", "GB"))
-//            a = network.createPartyNode(CordaX500Name("Alice", "New Your", "US"))
-//            b = network.createPartyNode(CordaX500Name("Bob", "London", "GB"))
+            a = network.createPartyNode(CordaX500Name("Alice", "London", "GB"))
+            b = network.createPartyNode(CordaX500Name("Bob", "New York", "US"))
             network.runNetwork()
         }
 
