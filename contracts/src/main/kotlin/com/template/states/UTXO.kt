@@ -33,5 +33,5 @@ data class UTXO(
     }
 
     override fun toString(): String =
-        "\"${owner.org}\" has ${amount.toFloat() / 10f.pow(asset.decimals)} of $asset"
+        "owner=${owner.org} value=${amount.toFloat() / 10f.pow(asset.decimals)}$asset"
 }
